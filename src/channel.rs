@@ -154,6 +154,40 @@ impl AxiDMAChannel {
         Ok(())
     }
 
+
+    /// Creates and setup the BD ring.
+    pub fn create_with_translate(&self, bd_count: usize, translate: fn(usize)->usize) -> AxiDMAResult {
+        if bd_count <= 0 {
+            error!("non-positive BD number {}", bd_count);
+            return Err(AxiDMAErr::InValidParam);
+        }
+        let mut ring = self.ring.lock();
+        ring.bds.clear();
+        ring.bds.reserve(bd_count);
+        for _ in 0..bd_count {
+            let bd = Box::pin(AxiDmaBD::new(
+                self.has_sts_cntrl_strm,
+                self.has_dre,
+                self.data_width as _,
+            ));
+            ring.bds.push_back(bd);
+        }
+        // link bd chain
+        for i in 0..bd_count {
+            let next_addr = &ring.bds[(i + 1) % bd_count].desc as *const _ as usize;
+            ring.bds[i].set_next_desc_addr(translate(next_addr));
+        }
+        ring.pending_cnt = 0;
+        ring.submit_cnt = 0;
+        ring.is_halted = true;
+        ring.all_cnt = bd_count;
+        ring.free_cnt = bd_count;
+        ring.bd_head = 0;
+        ring.bd_tail = 0;
+        ring.bd_restart = 0;
+        Ok(())
+    }
+    
     /// Reset this channel.
     pub fn reset(&self) -> AxiDMAResult {
         self.hardware().dmacr().modify(|_, w| w.reset().reset());
@@ -323,6 +357,28 @@ impl AxiDMAChannel {
             ring.pending_cnt = 0;
             // update tail desc
             self.update_tail_bd(ring.tail_desc_addr());
+        }
+        Ok(())
+    }
+
+    pub fn to_hw_with_translate(&self, translate: fn(usize)->usize) -> AxiDMAResult {
+        let hardware = self.hardware();
+        let mut ring = self.ring.lock();
+        if ring.is_halted {
+            let addr = ring.head_desc_addr();
+            self.update_cur_bd(translate(addr));
+            trace!("axidma::to_hw: cur desc addr: 0x{:x}", addr);
+        }
+        compiler_fence(SeqCst);
+        fence(SeqCst);
+        io_fence();
+        hardware.dmacr().modify(|_, w| w.run_stop().run());
+        ring.is_halted = false;
+        if ring.pending_cnt > 0 {
+            ring.submit_cnt += ring.pending_cnt;
+            ring.pending_cnt = 0;
+            // update tail desc
+            self.update_tail_bd(translate(ring.tail_desc_addr()));
         }
         Ok(())
     }

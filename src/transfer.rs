@@ -35,10 +35,8 @@ impl Transfer {
         self.channel.from_hw()?;
         // Deal the interrupt
         self.channel.intr_handler()?;
-        Ok(self
-            .buffer
-            .take()
-            .unwrap_or_else(|| unsafe { hint::unreachable_unchecked() }))
+        info!("hello111: {:?}", self.buffer);
+        Err(AxiDMAErr::DMAErr)
     }
 
     /// Blocks until the transfer is done and returns the buffer, the

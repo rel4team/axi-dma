@@ -515,11 +515,29 @@ impl AxiDma {
         Err(AxiDMAErr::BDRingNoList)
     }
 
+    pub fn tx_channel_create_with_translate(self: &Arc<Self>, bd_count: usize, translate: fn(usize)->usize) -> AxiDMAResult {
+        if let Some(tx_channel) = self.tx_channel.as_ref() {
+            tx_channel.intr_disable();
+            tx_channel.create_with_translate(bd_count, translate)?;
+            return Ok(());
+        }
+        Err(AxiDMAErr::BDRingNoList)
+    }
+
     /// Initialize the rx channel
     pub fn rx_channel_create(self: &Arc<Self>, bd_count: usize) -> AxiDMAResult {
         if let Some(rx_channel) = self.rx_channel.as_ref() {
             rx_channel.intr_disable();
             rx_channel.create(bd_count)?;
+            return Ok(());
+        }
+        Err(AxiDMAErr::BDRingNoList)
+    }
+
+    pub fn rx_channel_create_with_translate(self: &Arc<Self>, bd_count: usize, translate: fn(usize)->usize) -> AxiDMAResult {
+        if let Some(rx_channel) = self.rx_channel.as_ref() {
+            rx_channel.intr_disable();
+            rx_channel.create_with_translate(bd_count, translate)?;
             return Ok(());
         }
         Err(AxiDMAErr::BDRingNoList)
@@ -541,6 +559,16 @@ impl AxiDma {
         if let Some(rx_channel) = self.rx_channel.as_ref() {
             let transfer = Transfer::new(rx_channel.submit(buffer)?, rx_channel.clone());
             rx_channel.to_hw()?;
+            return Ok(transfer);
+        }
+        error!("axidma::rx_submit: no rx ring!");
+        Err(AxiDMAErr::BDRingNoList)
+    }
+
+    pub fn rx_submit_with_translate(self: &Arc<Self>, buffer: BufPtr, translate: fn(usize) -> usize) -> Result<Transfer, AxiDMAErr> {
+        if let Some(rx_channel) = self.rx_channel.as_ref() {
+            let transfer = Transfer::new(rx_channel.submit(buffer)?, rx_channel.clone());
+            rx_channel.to_hw_with_translate(translate)?;
             return Ok(transfer);
         }
         error!("axidma::rx_submit: no rx ring!");
