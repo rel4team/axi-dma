@@ -554,6 +554,16 @@ impl AxiDma {
         Err(AxiDMAErr::BDRingNoList)
     }
 
+    pub fn tx_submit_with_translate(self: &Arc<Self>, buffer: BufPtr, translate: fn(usize) -> usize) -> Result<Transfer, AxiDMAErr> {
+        if let Some(tx_channel) = self.tx_channel.as_ref() {
+            let transfer = Transfer::new(tx_channel.submit(buffer)?, tx_channel.clone());
+            tx_channel.to_hw_with_translate(translate)?;
+            return Ok(transfer);
+        }
+        error!("axidma::tx_submit: no tx ring!");
+        Err(AxiDMAErr::BDRingNoList)
+    }
+
     /// Submit a buffer to the rx channel
     pub fn rx_submit(self: &Arc<Self>, buffer: BufPtr) -> Result<Transfer, AxiDMAErr> {
         if let Some(rx_channel) = self.rx_channel.as_ref() {
