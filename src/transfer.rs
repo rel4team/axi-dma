@@ -35,7 +35,6 @@ impl Transfer {
         self.channel.from_hw()?;
         // Deal the interrupt
         self.channel.intr_handler()?;
-        info!("buffer: {:?}", self.buffer);
         Ok(self
             .buffer
             .take()
